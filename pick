@@ -1,0 +1,1653 @@
+#!/usr/bin/perl
+
+require 5.0;
+
+$pickVersion='$Revision: 3.5 $';
+$pickDate="11 March 2001";
+$pickAuthor="david a. imel, 300-243, x4-1539";
+$pickNotes="
+This version has: 
+  o improved binary output speed.
+  o fixed filename parsing bug
+  o embedded POD -- view via 'perldoc $0'
+  o suppressed c/r option 's'
+  o flushed I/O
+";
+
+$PI=3.14159265359;
+
+$dTypes="SAbcswuidfzZ";
+$pForms="udxnsgGoMPRIDbSAcU";
+
+$sizeMatch="^((\\d+)([$dTypes])?)\$";
+$dataMatch="(^(\\d+)?([$dTypes])"
+  ."((\\d+)([+-]\\d+)?)?(:(\\d+)(?::(\\d+))?)?([$pForms]+)?\$)";
+  
+$moveMatch="((^[+-]\\d+)([$dTypes])?\$)";
+
+%fBytes=( S=>1, A=>1, b=>1, c=>1, s=>2, w=>2, 
+          u=>4, i=>4, f=>4, d=>8, z=>8, Z=>16 );
+
+%pDefaults=( b=>'x', c=>'c', s=>'d', w=>'u', S=>'S', A=>'A',
+             u=>'u', i=>'d', f=>'g', d=>'g', z=>'RI', Z=>'RI' ); 
+
+%tTypes=( S=>'a', A=>'a', b=>'C', c=>'a', s=>'s', w=>'S', 
+          u=>'I', i=>'i', f=>'f', d=>'d', z=>'f', Z=>'d' ); 
+
+%pFormats=( u=>'%u', d=>'%d', x=>'%02x', n=>"\n", s=>'', 
+            g=>'%g', G=>'%25.18g', o=>'%03o', S=>'%c', A=>'%c', c=>'%c', 
+            M=>'%g', P=>'%g', R=>'%g', I=>'%g', D=>'%g', U=>'%s'
+          );
+
+@ascii=( 
+        "nul", "soh", "stx", "etx", "eot", "enq", "ack", "bel",
+        "bs",  "ht",  "nl",  "vt",  "np",  "cr",  "so",  "si",
+        "dle", "dc1", "dc2", "dc3", "dc4", "nak", "syn", "etb",
+        "can", "em",  "sub", "esc", "fs",  "gs",  "rs",  "us",
+        "sp",  "!",   "\"",  "#",   "\$",  "%",   "&",   "`",
+        "(",   ")",   "*",   "+",   ",",   "-",   ".",   "/",
+        "0",   "1",   "2",   "3",   "4",   "5",   "6",   "7",
+        "8",   "9",   ":",   ";",   "<",   "=",   ">",   "?",
+        "\@",  "A",   "B",   "C",   "D",   "E",   "F",   "G",
+        "H",   "I",   "J",   "K",   "L",   "M",   "N",   "O",
+        "P",   "Q",   "R",   "S",   "T",   "U",   "V",   "W",
+        "X",   "Y",   "Z",   "[",   "\\",  "]",   "^",   "_",
+        "`",   "a",   "b",   "c",   "d",   "e",   "f",   "g",
+        "h",   "i",   "j",   "k",   "l",   "m",   "n",   "o",
+        "p",   "q",   "r",   "s",   "t",   "u",   "v",   "w",
+        "x",   "y",   "z",   "{",   "|",   "}",   "~",   "del"
+);
+
+$fPos=0;
+ 
+sub versionHelp {
+  print "
+This is pick, (perl) $pickVersion, $pickDate.
+$pickNotes
+Written by $pickAuthor.
+Please submit criticisms/suggestions/questions to: 
+          imel\@jpl.nasa.gov
+
+";
+}
+
+sub usageHelp {
+
+  print "
+pick Usage:
+
+   pick filename recordLength -options parameters fields
+   cat datafile | pick recordLength -options parameters fields
+
+The filename must be the first command line argument if specified.
+The record length (bytes, or specify data type units) must be the 
+next command line argument.  See ?p for alternatives.
+
+Detailed Help available:
+       'pick ?p' for help on parameters
+       'pick ?r' for help on field requests
+       'pick ?f' for help on printFormatLists
+       'pick ?t' for help on data types
+       'pick ?m' for help on move requests
+       'pick ?o' for help on options
+       'pick ?g' for help on groupings and multiplers
+       'pick ?x' for some examples
+       'pick ?q' for help on symbol files
+       'pick ?v' for version and author
+       'pick ??' for all help available
+(Pipe the output to more, i.e., 'pick ?? | more' for readability.)
+  
+Or, view the embedded man page (POD) via:
+   
+   perldoc $0
+
+";
+}
+
+sub parmHelp {
+  print "
+
+The parameters are of the form:
+   key1 = val1 key2 = val2 ...
+
+The available parameter keywords are listed below.
+The value is a number of records for the start, stop,
+skip, nrecs, rec and every keys, a number of bytes
+or data type words (see data type help) for the head,
+length and size keys.  The file key takes an ascii filename.
+
+file:   alternative way to specify filename. 
+        (filename is a synonym for file)
+size:   alternative way to specify recordLength.
+        (length is a synonym)
+
+start:  First record to extract (zero offset), default 0
+stop:   Last record to extract, default is '-1', indicating EOF.
+skip:   Number of records to skip between each extract.
+        (default is zero; extract every record)
+head:   Number of bytes or data words to skip before
+        counting records.  E.g., head=256 ignores a
+        256-byte header, head=4z ignores a header of
+        four single-precision complexes.  (32 bytes)
+
+rec:    Extract a single record (same as start=stop=rec)
+nrecs:  Use instead of specifying both start and stop;
+        determines number of records to extract.  I.e,
+        start=0 nrecs=11 is the same as start=0, stop=10
+every:  Use instead of skip; every=10 gets every 10th record.
+        (i.e., same as skip=9)
+
+";
+}
+
+sub optionHelp {
+  print "
+
+The options are of the form -opt1opt2... or -opt1 -opt2:
+
+l:  print a line number for every output line.
+n:  print a record number for every output line.
+m:  print the byte location in the file for every output line.
+r:  reverse the order of the bytes.
+u:  all output is in binary format only; ignore print requests
+b:  fast version of 'u' option:  no bit masking or byte reversal
+q:  quiet output; turn off diagnostic messages, which are sent to STDERR
+s:  suppress c/r after printing for each record
+
+For example,
+              'pick file.dat 20f -nlr ...'
+would print each line with the line number, then
+  the record number, followed by whatever data were
+  requested in the command line (represented by '...').
+  These data would be interpreted in reverse byte order
+  before printing.
+
+";
+}
+
+sub fieldHelp {
+  print "
+
+There are two kinds of field requests: moves and prints.
+  A print request will also move the current location in
+  the record.  A move request generates no output.
+
+Type 'pick ?m' for help on move requests.
+
+A print request has the format:
+
+N'type'Offset:bitOffset:nBits'printFormatList'
+
+and must be separated by spaces from every other
+command line argument.  The components are defined as:
+
+N: Number of sequential fields of this data type
+   to extract and print.  N is optional, with a
+   default value of 1.  It must not have a sign
+   prefixed ('+' or '-').
+
+type:  The data type of the fields to extract and print.
+       Type 'pick ?t' for information on data types.
+
+Offset:  The 'Offset' has the form:
+              dataOffset(+|-)byteOffset
+         where dataOffset is the absolute location
+         of this item in the record in numbers of items
+         of type 'type', and the byteOffset is the
+         the desired offset in bytes from this location.
+         'Offset' is an optional parameter, if not
+         specified, the next item in the record will be
+         selected.  The 'byteOffset' is an optional
+         component of the 'Offset'.  However, if it
+         is used, then the 'dataOffset' must also be
+         specified, even if '0'.  The sign must be
+         included as part of the byteOffset.
+         For example, the field
+                     z60-2
+         selects the 60th single-precision complex item,
+         offset towards the beginning of the record by
+         two bytes.  A common convenient way to specify
+         an absolute byte location within a record is to
+         specify the dataOffset as zero with a positive
+         byte offset.  For example, the request above 
+         could also be written:
+                     z0+478
+         which selects the complex number at an offset
+         of 478 bytes from the beginning of the record.
+         The counting for byte and data offsets, as with 
+         all other counting in pick, is zero-offset.
+
+bitOffset:  (Not available for data types with more than 4 bytes.)
+            An optional field which specifies the first
+            bit of the data field to use.  'bitOffset'
+            is zero offset.  For example, the field
+                          i:7
+            selects the next integer, and only uses
+            the eighth through 32nd bits (7--31)
+            for printing.  Bit zero is the LSB.
+
+nBits:  (Not available for data types with more than 4 bytes.)
+        If a 'bitOffset' is specified, 'nBits' may
+        be used to to select the number of bits,
+        starting from the 'bitOffset', to be printed.
+        For example, the field
+                        w5:1:7
+        selects the second through eighth bits (1-7)
+        of the fifth unsigned short in the record.
+
+printFormatList:  Zero or more print formats used to
+                  specify the format of the output for
+                  this field request.
+                  Type 'pick ?f' for detailed help.
+
+";
+}
+
+sub printHelp {
+print "
+  
+  printFormatList:  The printing formats available are:
+  
+          Available to all Data Types:
+          'x' hex               'x' octal
+          'b' binary            'c' ascii
+
+          'S' ascii, with no space between items.
+          'A' ascii, won't print non-printing characters.
+  
+          'U' unformatted (binary bytes) output
+
+          Available to Integral Data Types Only:
+          'd' decimal           'u' unsigned decimal
+  
+          Available to Floating Data Types Only:
+          'g' floating  (For complex types, equivalent to RI format.)
+          'G' same as 'g', but with lots of digits.
+          'D' degrees; assumes the data value is in
+              radians, and performs the conversion to
+              output degrees.
+  
+          Available to Complex Data Types Only:
+          'R' real component    'I' imaginary component
+          'M' magnitude         'P' phase in radians
+                                'D' phase in degrees
+  
+          Non-data print formats for all types:
+          'n' insert CR/LF      's' insert <sp>
+
+          A 'printFormatList' is composed of zero or more
+          printing formats.  If none is specified, the
+          defaults will be used:
+             Data Type       Default Printformat
+                A                    A
+                S                    S
+                c                    c
+                b                    x
+                s                    d
+                w                    u
+                i                    d
+                u                    u
+                f                    g
+                d                    g
+                z                    RI
+                Z                    RI
+
+          For example:
+              f wb zMPn i0+57osss Z b5:1:7bdx
+          Prints a single precision floating point in 'g'
+          format, an unsigned short in binary, a single-
+          precision complex's magnitude and phase followed
+          by a newline, the integer at byte offset 57 in
+          octal followed by three extra spaces, a
+          double-precision complex's real and imaginary
+          component, and bits 1-7 of the fifth unsigned
+          char interpreted first as binary, then decimal
+          and finally hexadecimal.
+  
+";
+}
+
+sub moveHelp {
+print "
+
+  A move request has the format:
+    (+|-)N'type'
+  where the '+' or '-' specifies the move direction,
+    N is the number of data words to move (bytes if no
+    'type' identifier is specified).  See below for 'type'
+    specifiers.
+  Examples:  +2 -237 +5z -3i
+    these move the current location in the record by
+    forward 2 bytes, back 237 bytes, forward 40 bytes
+    and back 12 bytes, respectively.
+  
+";
+}
+
+sub typeHelp {
+print "
+  
+         The following data types are supported by pick:
+         (Sizes in bytes are listed in brackets.)
+  
+         Integral Data Types:
+          'c' [1] signed char;     'b' [1] unsigned char
+          's' [2] signed short;    'w' [2] unsigned short
+          'i' [4] signed int;      'u' [4] unsigned int
+  
+         whether or not an integral data type is signed only
+         really matters to the default output printformat.
+         The printformat used determines whether the data are
+         interpreted as signed or unsigned.
+
+          'S' [1] is a synonym for 'c', but uses
+                  the 'S' printFormat as default.
+          'A' [1] is a synonym for 'c', but uses
+                  the 'A' printFormat as default.
+  
+         Floating Types:
+          'f' [4] single float;    'd' [8] double float
+          'z' [8] float complex;   'Z' [16] double complex
+  
+";
+}
+
+sub groupHelp {
+print "
+  
+  Groups and group multipliers:
+  
+  Any number of fields may be enclosed in brackets
+  to form a group.  For example:
+           [ 4f i ] 
+  requests a group of four floats followed by an integer.
+
+  In order to avoid being interpreted by the shell, one
+  may need to escape the '[]'s with a backslash '\\' or by
+  enclosing the string within single quotes:
+           '[ 4f i ]'
+  This is a syntax quite like the Unix awk command line.
+
+  A numerical prefix to the group designates a repetition
+  factor for the group.  For example:
+           20[ f +96f i -100f ]
+  requests 20 pairs of floats and integers, where each
+  float is separated from the integer by 400 bytes, but
+  the floats and the integers themselves are sequential.
+  There must be no space between the prefix and the opening
+  bracket.
+";
+}
+
+sub symHelp {
+print "
+
+  pick Symbol Files:
+
+  As a convenience for dealing with standard file formats,
+  such as the ifproc mocomp file, the AIRSAR mocomp file,
+  SRTM telemetry, AIRSAR headers and subcommutated headers,
+  TOPEX/Poseidon SDR's and GDR's, GeoSAR time-dependent parameter
+  files, etc, one may define a symbol file as a set of 
+  (possibly recursive) key = value definitions mapping more
+  easily remembered mnemonics onto admittedly less-obvious pick
+  commands.  For example, to define the ifproc mocomp symbol file,
+  the following file is created:
+
+; This is the symbol table for .moc files, which
+; are the radar motion compensation files for section 334.
+
+length=21d  ; length is 21 double-precision (8 byte) numbers
+
+; these are the components of the file
+
+xRec = d0G
+xrec = d0G
+time = d1G
+utc = d1G
+prf = d2 ; actually 1/prf...
+tprf = d2
+posS = d3
+posC = d4
+posH = d5
+pos = posS posC posH
+velS = d6
+velC = d7
+velH = d8
+vel = velS velC velH
+af1S = d9
+af1C = d10
+af1H = d11
+af1 = 3d9
+af2 = 3d12
+af3 = 3d15
+az = d18
+yaw = d18
+pitch = d19
+roll = d20
+orient = 3d18
+azD = d18D
+yawD = d18D
+pitchd = d19D
+rollD = d20D
+orientD = 3d18D
+all = 21d0
+af = af1 af2 af3
+angles = posS orientD
+velocities = posS vel
+tube = pos
+
+
+  Note that the file is very similar to RDF (though pre-dating
+  it by a couple of years), with comment fields delimited by
+  semi-colons.  However, the values are interpreted recursively:
+  the 'af' key's value, 'af1 af2 af3' is defined elsewhere in the
+  file.
+
+  Note also that the symbols 'length', 'size' and 'head' are reserved
+  for pick; in a symbol file they do not define new symbols
+  but rather serve as parameter definitions.  For example, in
+  this mocomp file, the record length is set at the beginning of
+  the file to be 21 doubles long.
+
+  If this file is in the present-working directory, named 'moc',
+  and a mocomp file named test.moc is available, then one could
+  use commands like:
+
+        pick sym=moc test.moc velocities every=100
+
+  to print out the velocities as a function of along-track position
+  for every hundredth entry in the file.  A nice shortcut is to
+  use an environmental variable, recognized by pick:  PICKPATH,
+  to specify a folder of such symbol files.  If the filename specified
+  by the sym parameter isn't in the present-working directory, then
+  pick will search the folder specified by PICKPATH.  For example,
+  add the lines to the .zshenv file:
+
+        export PICKPATH=/users/imel/.pick
+        alias pickMocomp='pick sym=moc'
+
+  and put a copy of the moc file listed above in that folder.
+  Now, the above command is:
+
+        pickMocomp test.moc velocities skip=100 | xmgr -nxy -source stdin &
+
+  where we've piped the output to xmgr for display.
+
+";
+}
+
+sub examplesHelp {
+print "
+  
+  Example Field Requests:
+  
+  4d0+30 2z 5i 
+  
+  Extract, starting at byte 30 in the record, four
+  double-precision floats, print in floating point format,
+  two single-precision complex's, print real followed
+  by imaginary components for each, and five 4-byte
+  signed integers, printing in signed decimal format.
+  
+  6[ f i ]
+  
+  From the present position in the record,
+  extract a series of 6 4-byte float and
+  4-byte integer pairs, printing the
+  floats in floating point format and the
+  integers in signed decimal format.
+  
+  Z20 +1280Z ZMP 
+  
+  Extract the twentieth double-precision complex
+  in the record, print in floating point format
+  (real <sp> imaginary), move forward 1280 double
+  precision complexes (1280*16 bytes) and extract
+  another double precision complex, printing the
+  magnitude followed by the phase in radians.
+  
+  20[ f 3[ wx cb ] +1000 i:27d -1091 ]
+  
+  Extract a 4-byte float (print in floating point),
+  3 unsigned short-signed char pairs, printing the
+  short in hex and the char in binary, move forward
+  1000 bytes, extract a four-byte signed integer,
+  printing only the 5 most significant bits
+  in decimal format, and move back 1091 bytes.
+  Repeat this operation 20 times for each record.
+  
+  Note that for moves, the current position in the record
+  is the location after the most recent request.  For example,
+  in the above, the +1000 byte move is referenced from the
+  position after the third short/byte pair.
+  
+  Complete Examples
+  
+  pick file1.dat 256 20c100c rec=1
+  
+  Prints twenty characters in ascii format starting
+  at byte 100 for the second (256-byte) record only
+  in file1.dat.
+  
+  pick file2.dat 5120f 10f500 head=5i start=500
+  
+  Prints in floating point format ten consecutive
+  single-precision floats starting at the 500'th
+  float in the record, for every record starting
+  with record number 500 (the 501'st 5120*4=20480 byte
+  record in file2.dat). The record count begins after a 
+  5 integer (20 byte) header.
+  
+  pick file3.dat 80 40[ cc +1 ] skip=1
+  
+  Prints every other character in each record
+  (ascii format), skipping every other record.
+  (The first character in the file is printed.)
+  
+  pick gold225-1.laux 128 +90 32b -b \
+     start=`pick gold225-1.laux 128 +88 w -n \
+     | awk '{ if ($2==0) { print $1 ; exit;}}'` \
+  | pick 4096 +439 50A
+
+  This command line actually launches three pick processes
+  in order to extract a field from an AIRSAR subcommutated
+  header.  The first 'pick' command extracts the subcommutated
+  header, starting with the record specified by the result 
+  of the second pick command, which extracts the index field
+  from the header.  When the index field reaches zero, a new
+  subcommutated header begins.  So the output of the second
+  pick command is sent to awk to look for the record corresponding
+  to an index value of zero.  The output of the first pick command
+  is now a set of subcommutated headers (in their original binary
+  format) which is piped to the third pick command, which selects
+  the desired field:  50 Ascii characters starting at an offset
+  from the beginning of the record by 439 bytes.
+
+";
+}
+
+sub finish {
+  close FILE if $isFile;
+  exit;
+}
+
+sub allHelp {
+  optionHelp;
+  parmHelp;
+  fieldHelp;
+  typeHelp;
+  printHelp;
+  moveHelp;
+  groupHelp;
+  symHelp;
+  examplesHelp;
+  versionHelp;
+}
+
+sub getHelp {
+  usageHelp    unless ($_);
+  usageHelp    if /help/;
+  usageHelp    if /\-h/;  
+  usageHelp    if /\?h/; 
+  allHelp      if /\?\?/; 
+  usageHelp    if /\?$/; 
+  fieldHelp    if /\?r/; 
+  typeHelp     if /\?t/; 
+  parmHelp     if /\?p/; 
+  moveHelp     if /\?m/; 
+  optionHelp   if /\?o/; 
+  printHelp    if /\?f/; 
+  versionHelp  if /\?v/; 
+  examplesHelp if /\?x/; 
+  groupHelp    if /\?g/; 
+  symHelp      if /\?q/;
+
+  if ($parms{sym}) { 
+      print "Symbols defined in $symFile:\n";
+      foreach $s (sort keys %sym) { print "$s=$sym{$s}\n"; } 
+  }
+
+  finish;
+}
+
+sub symSubs {
+  $symFile=$parms{sym};
+  unless (-e $symFile) {
+    $symFile=$ENV{PICKPATH}."/".$symFile;
+    die "Couldn't find symbol table-->$symFile<--\n" unless -e $symFile; 
+  }
+  open SYM,"<$symFile";
+  while ($l=<SYM>) {
+    chomp($l);
+    $l=~s/;.*//;
+    my ($k,$v)=$l=~/(\S+)\s*=\s*(.+)/;
+    $sym{$k}=$v if (($k)&&($v));
+  }
+  close SYM;
+  $keyMatch=join('|',keys %sym);
+  while (($m)=/\b($keyMatch)\b/i) { s/\b$m\b/$sym{$m}/; }
+  my @symParms=("head", "size", "length");
+  foreach $k (@symParms) {
+    if (defined $sym{$k}) {
+      my ($v,$u)=$sym{$k}=~/(\d+)([$dTypes]?)/; 
+      $parms{$k}=$v; $parms{$k}*=$fBytes{$u} if $u;
+    }
+  }
+}
+
+sub parseField { 
+  my $f=shift;
+  my $sm,$m,$t,$bf,$n,$o,$b,$b1,$b2,$p;
+  if (($fm,$sm,$t)=$f=~/$moveMatch/) { 
+    $t||="b";
+      my $cPos=$fPos;
+    $fPos+=$sm*$fBytes{$t};
+    return ( src=>$f, move=>1, pos=>$cPos, nb=>$sm*$fBytes{$t}, t=>$t  );
+  } elsif (($fm,$m,$t,$bf,$n,$o,$b,$b1,$b2,$p)=$f=~/$dataMatch/) {
+    $m||=1; 
+    $p||=$pDefaults{$t};
+    if (length $bf) { 
+      $o||=0;
+      my $cPos=$fBytes{$t}*$n+$o;
+      $fPos=$fBytes{$t}*($n+$m)+$o;
+      die "data requested beyond record length" if $fPos>$parms{size};
+      my $slow=(defined $b) || $opts{r};
+      $b2=8*$fBytes{$t} unless defined $b2;
+      $r=[0..$fBytes{$t}-1];
+      @$r=reverse @$r if $opts{r};
+      $p='U' if $opts{u};
+      for ($mask=1, $i=1; $i<$b2; $i++) { $mask<<=1; $mask|=1; }
+      return ( src=>$f, move=>0, pos=>$cPos, ut=>$tTypes{$t}, fb=>$b1, mb=>$b2,
+               abs=>1, nb=>$fBytes{$t}, m=>$m, p=>$p, t=>$t, mask=>$mask,
+               ao=>$r, slow=>$slow );
+    } else { 
+      my $cPos=$fPos;
+      $fPos+=$fBytes{$t}*$m;
+      die "data requested beyond record length" if $fPos>$parms{size};
+      my $slow=(defined $b) || $opts{r};
+      $b2=8*$fBytes{$t} unless defined $b2;
+      $r=[0..$fBytes{$t}-1];
+      @$r=reverse @$r if $opts{r};
+      $p='U' if $opts{u};
+      for ($mask=1, $i=1; $i<$b2; $i++) { $mask<<=1; $mask|=1; }
+      return ( src=>$f, move=>0, pos=>$cPos, ut=>$tTypes{$t}, fb=>$b1, mb=>$b2,
+               abs=>0, nb=>$fBytes{$t}, m=>$m, p=>$p, t=>$t, mask=>$mask,
+               ao=>$r, slow=>$slow );
+    }
+  } else {
+    print "$f:  Matched neither a move nor a data request\n";
+    finish;
+  }
+}
+
+sub parseToken {
+  my $t=shift;
+  my $dr=shift;
+  $$t=~s/\\//g;  # remove backslashes
+  my $i, $td;
+  my ($n,$y,$d)=$$t=~/(\d*)(Y)(\d+)/;
+  if ($y) {
+    $n||=1;
+    for ($i=0; $i<$n; $i++) { 
+      foreach $td (split(' ',$$dr[$d])) { parseToken(\$td,$dr); }
+    } 
+  } else { push @q, { parseField $$t }; }
+}
+
+# I/O subroutines
+
+sub pickSeek {
+  my $seek=shift || return 1;                # return if no seek
+  my $nBytes=($seek-$filePos) || return 1;   # shouldn't have to backup!
+  if ($isFile) { $filePos=$seek; return seek FILE,$nBytes,1; }
+  return 1 if $nBytes<1;                     # can't backup on STDIN
+  $filePos=$seek;
+  return read STDIN, $dummy, $nBytes;
+}
+
+sub printData {
+  my $data=shift;
+  my $fast=$opts{b};
+  foreach $q (@qa) {
+    if ($fast) {                                     # fast binary 
+      my $qnb=$q->{nb}*$q->{m};
+      syswrite STDOUT,substr($data,$q->{pos},$qnb),$qnb; 
+      next; 
+    } 
+    for ($i=0; $i<$q->{m}; $i++) { 
+      my $d0=substr($data,$q->{pos}+$i*$q->{nb},$q->{nb}*$q->{m});
+      foreach $p (split('',$q->{p})) {
+        $nb=int((7+$q->{mb})/8);                       # pseudo-ceiling fn
+        unless ($q->{slow}) { $d=$d0; }                # no bit fields or rev.
+        else { 
+          my @k=unpack("C1"x$q->{nb},$d0);             # array of bytes
+          $ao=$q->{ao};                                # ordering array ref
+          for ($#r=0, $j=0; $j<$q->{nb}; $j++) { $r[$j]=$k[$ao->[$j]]; }
+          unless ($q->{nb}>4) {                        # bit masking <=4 bytes
+            $u=0; foreach $r (@r) { $u<<=8; $u|=$r; }
+            $u>>=$q->{fb}; $u&=$q->{mask}; 
+            for ($#d=0, $j=0; $j<$nb; $j++) { 
+              $d[$j]=pack("C1",$u&0xff); $u>>=8; 
+            }
+            for ($j=$nb; $j<$q->{nb}; $j++) { $d[$j]=pack("C1",0x00); }
+            @d=reverse @d;
+          } else { 
+            for ($#d=0, $j=0; $j<$nb; $j++) { $d[$j]=pack("C1",$r[$j]); }
+          }
+          $d=join('',@d);
+        }
+        if ($p eq 'U') { syswrite STDOUT,$d,$nb; }
+        elsif ("\l$q->{t}" eq 'z') {
+          my @u=unpack("$q->{ut}$q->{nb}"x2,$d);  # one for each: real, imag
+          if ($p eq 'R') { printf($pFormats{$p},$u[0]); }
+          elsif ($p eq 'I') { printf($pFormats{$p},$u[1]); } 
+          elsif ($p eq 'M') { 
+            printf($pFormats{$p},sqrt($u[0]*$u[0]+$u[1]*$u[1])); 
+          } elsif ($p eq 'P') {
+            printf($pFormats{$p},atan2($u[1],$u[0])); 
+          } elsif ($p eq 'D') {
+            printf($pFormats{$p},180.0*atan2($u[1],$u[0])/$PI); 
+          } else {
+            printHelp;
+            die "Unrecognized print format for complex type: $p\n";
+          }
+        } else {
+          if (($p eq 'c') || ($p eq 'S') || ($p eq 'A')) {
+            foreach $u (unpack("a1"x$q->{nb},$d)) {
+              if ($u=~/[\040-\176]/) { 
+                printf("%s",$u); 
+              } else {
+                if (ord($u)<128) {
+                  if ($p=~/^c$/) { printf("%s",$ascii[ord($u)]); }
+                  elsif ($p=~/^S$/) { printf("(%s)",$ascii[ord($u)]); }
+                } else {
+                  if ($p=~/^c$/) { printf("%0o",ord($u)); }
+                  elsif ($p=~/^S$/){ printf("(%0o)",ord($u)); }
+                }
+              }
+            }
+          } elsif ($p=~/^[udgG]$/) { 
+            printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)); 
+          } elsif ($p eq 'D') {
+            printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)*180.0/$PI);
+          } elsif ($p=~/^[ns]$/) { printf($pFormats{$p}); }
+          elsif ($p=~/^[xo]$/) {
+            my @bout;
+            @k=unpack("C1"x$q->{nb},$d);
+            foreach $k (@k[$q->{nb}-$nb..$q->{nb}-1]) { 
+                printf($pFormats{$p},$k); printf(" "); 
+            }
+          } elsif ($p=~/^b$/) {
+            my @bout;
+            @k=reverse unpack("C1"x$q->{nb},$d);
+            foreach $k (@k[0..$nb-1]) { 
+                foreach (1..8) { unshift @bout,$k&0x1;$k>>=1; } 
+            }
+            for ($bb=scalar(@bout)-$q->{mb}; $bb<scalar(@bout); $bb++) {
+              printf("%d",$bout[$bb]); 
+              printf(" ") if (scalar(@bout)-($bb+1))%4==0;
+            }
+          } else { 
+            usageHelp;
+            printHelp;
+            die "unrecognized print format-->$p<--\n"; 
+          }
+        }
+        if ($p=~/[^SAUn]/) { printf(" "); } # space between output fields
+      }
+    }
+  }
+}
+
+#
+# Program starts here
+#
+
+$|=1;  # turn off output buffering
+
+# Get command line and parse it
+
+$_=join(' ',@ARGV); 
+
+# next, get options and parameters
+
+%opts=( m=>0, n=>0, b=>0, l=>0, q=>0, r=>0, s=>0, u=>0 ); # all default to off
+
+while (($oTag,$oName)=/\s([-]([a-zA-Z]+))/) {
+  foreach $k (keys %opts) { 
+    if ($oName=~/$k/) { $opts{$k}=1; $oName=~s/$k//g; }
+  }
+  if ($oName) {
+    usageHelp; optionHelp; die "Unrecognized option-->$oName<--\n";
+  }
+  s/$oTag//;
+}
+
+$nParms="start|head|stop|skip|nrecs|every|length|size|header|rec";
+$wParms="file|filename|sym|symFile|symTable";
+
+while (($match,$k,$v,$u)=/(($nParms)\s*=\s*(\d+)([$dTypes]?))/i) { 
+  s/$match//; $parms{$k}=$v; $parms{$k}*=$fBytes{$u} if $u; 
+}
+while (($match,$k,$v)=/(($wParms)\s*=\s*([\S]+))/i) { 
+  s/$match//; $parms{$k}=$v;
+}
+if (/=/) {
+  usageHelp;
+  parmHelp;
+  die "Unexpected '=' in command line after parsing parms:\n     $_\n";
+}
+
+$parms{sym}||=($parms{symTable}||=$parms{symFile});
+symSubs if $parms{sym};  # do symbol table
+
+# needed possible symbol table before checking for help
+
+if ((/\?/)||(!$_)||(/help/)) { getHelp; finish; }
+
+# get filename; if not parameter, try first command line argument
+
+s/\s*(.*)/$1/; @args=split('\s',$_);
+unless ($parms{file}) {
+  if ( -e $args[0]) { $parms{file}=shift @args; s/\Q$parms{file}\E//; } 
+  else { 
+    $parms{file}="-"; 
+    print STDERR "Reading from stdin\n" unless $opts{q}; 
+  } 
+} 
+
+# take care of synonyms and defaults
+
+$parms{stop}=$parms{start}=$parms{rec} if defined $parms{rec};
+
+$parms{head}||=$parms{header};
+$parms{head}||=0;
+$parms{file}||=$parms{filename};
+$parms{size}||=$parms{length};
+
+# get recordsize; if not parameter, try next command line argument
+
+unless ($parms{size}) {
+  my $n, $t;
+  if ( ($match,$n,$t)=$args[0]=~/$sizeMatch/ ) { 
+    $t||='b'; $parms{size}=$n*$fBytes{$t}; s/$match//; 
+  } 
+  else {
+    usageHelp;
+    die "Can't find record size; looking at $args[0]";
+  }
+} 
+
+unless (defined $parms{skip}) {
+  if (defined $parms{every}) { $parms{skip}=$parms{every}-1; }
+  else { $parms{skip}||=0; }
+}
+unless (defined $parms{stop} && defined $parms{start}) {
+  if (defined $parms{start}) {
+    if (defined $parms{nrecs}) { $parms{stop}=$parms{start}+$parms{nrecs}-1; }
+    else { $parms{stop}=-1; } # indicates read until eof 
+  } elsif (defined $parms{stop}) {
+    if (defined $parms {nrecs}) { $parms{start}=$parms{stop}-$parms{nrecs}+1; }
+    else { $parms{start}=0; }
+  } elsif (defined $parms{nrecs}) {
+    $parms{start}=0; $parms{stop}=$parms{start}+$parms{nrecs}-1; 
+  } else { $parms{start}=0; $parms{stop}=-1; }
+}
+
+# next, parse the data requests into control structures
+
+my $ny=0;
+while (($y)=/\[([^\[\]]*)\]/) { 
+  $y=~s/([+-])/\\$1/g; s/\[$y\]/Y$ny /; $Y[$ny++]=$y; 
+}
+foreach $t (split) { parseToken(\$t,\@Y); }
+
+@qa=grep !$_->{move}, @q; # don't need moves since we have positions
+
+# now we have a list of structures for each field request and/or move
+# step through the data file and pick out each one
+
+open FILE,"<$parms{file}" if $isFile=($parms{file} ne '-');
+
+$filePos=0;  # start at byte zero
+
+if ($parms{head} && !pickSeek($parms{head})) { 
+  usageHelp; die "End of file while seeking past header"; 
+}
+
+my $done=0;
+my $cr=$parms{start};    # current record
+my $nLines=0;
+do {
+  my $seekTo=$cr*$parms{size}+$parms{head};
+  pickSeek($seekTo) || finish;
+  unless ($isFile) { 
+    ((read STDIN, $data, $parms{size})==$parms{size}) || finish; 
+  } else { 
+    ((read FILE, $data, $parms{size})==$parms{size}) || finish; 
+  }
+  print "$nLines " if $opts{n};
+  print "$cr " if $opts{l};
+  print "$filePos " if $opts{m};
+  printData $data;
+  print "\n" unless ($opts{u}||$opts{b}||$opts{s}); 
+  $filePos+=$parms{size}; # from read
+  $cr+=$parms{skip}+1;    # one for the record we just read, then skip records
+  $nLines++;              # number of lines printed out
+  $done=($cr>$parms{stop}) unless $parms{stop}<0;
+} while (!$done);         # loop will terminate on end-of-file
+
+finish;
+
+# end of script
+
+  
+
+=head1 NAME 
+
+pick - Data parsing utility.
+
+=head1 SYNOPSIS
+
+   pick file.dat reclen [ fieldRequests | options | parameters ]
+
+   cat file.dat | pick reclen [ fieldRequests | options | parameters ]
+
+=head1 DESCRIPTION
+
+pick is a very general purpose data extraction utility.  It prefers to deal
+with data files composed of fixed-length records, though a header of alternate
+length is allowed.  For PN-encoded variable-length record binary data, see
+the syncMatch(1) command.
+
+pick is ideal for selecting pieces of data and piping them to stdout for
+further processing, perhaps by awk for calculations or xmgr for plotting.
+
+pick can be used with a symbol table corresponding to a given data format,
+so that symbol names can be used for the fieldRequests.  For example,
+
+   pickMocomp rosa.moc sym=moc posS posC posH orient
+
+could be used with the symbol table file, F<moc>, to extract position and
+attitude information from a mocomp file with meaningful mnemonics.  posS, 
+I<et al.>, are defined within F<moc> in terms of standard pick fieldRequests.
+
+=head2 Trivial Examples
+
+   pick file.dat 12d 3d
+
+reads F<file.dat> which has a record length corresponding to 
+12 double-precision floating point numbers (real*8) and writes to stdout
+the first three floating point numbers in each record.
+
+=head2 Options
+
+The options are of the form -opt1opt2... or -opt1 -opt2.
+For example,
+
+   pick file.dat 20f -nlr ...'
+
+would print each line with the line number, then
+the record number, followed by whatever data were
+requested in the command line (represented by '...').
+These data would be interpreted in reverse byte order
+before printing.
+
+=over 4
+
+=item ? - Online help.  The following online help is available:
+
+   	  'pick ?p' for help on parameters
+   	  'pick ?r' for help on field requests
+   	  'pick ?f' for help on printFormatLists
+   	  'pick ?t' for help on data types
+   	  'pick ?m' for help on move requests
+   	  'pick ?o' for help on options
+   	  'pick ?g' for help on groupings and multiplers
+   	  'pick ?x' for some examples
+   	  'pick ?q' for help on symbol files
+   	  'pick ?v' for version and author
+   	  'pick ??' for all help available
+
+   (Pipe the output to more, i.e., 'pick ?? | more' for readability.)
+
+=item l - print a line number for every output line.
+
+=item n - print a record number for every output line.
+
+=item m - print the byte location in the file for every output line.
+
+=item r - reverse the order of the bytes.
+
+=item u - all output is in binary format only; ignore print requests
+
+=item b - fast version of 'u' option:  no bit masking or byte reversal
+
+=item q - quiet output; turn off diagnostic messages, which are sent to STDERR
+
+=item s - suppress c/r after printing for each record
+
+=back
+
+=head2 Parameters
+
+The parameters are of the form:
+
+   key1 = val1 key2 = val2 ...
+
+=over 4
+
+The available parameter keywords are listed below.
+The value is a number of records for the start, stop,
+skip, nrecs, rec and every keys, a number of bytes
+or data type words (see data type help) for the head,
+length and size keys.  The file key takes an ascii filename.
+
+=item file - alternative way to specify filename. 
+(filename is a synonym for file)
+
+=item size - alternative way to specify recordLength.
+(length is a synonym)
+
+=item start - First record to extract (zero offset), default 0
+
+=item stop - Last record to extract, default is '-1', indicating EOF.
+
+=item skip - Number of records to skip between each extract.
+(default is zero; extract every record)
+
+=item head - Number of bytes or data words to skip before
+counting records.  E.g., head=256 ignores a
+256-byte header, head=4z ignores a header of
+four single-precision complexes.  (32 bytes)
+
+=item rec - Extract a single record (same as start=rec stop=rec)
+
+=item nrecs - Use instead of specifying both start and stop;
+determines number of records to extract.  I.e,
+start=0 nrecs=11 is the same as start=0, stop=10
+
+=item every - Use instead of skip; every=10 gets every 10th record.
+(i.e., same as skip=9)
+
+=back
+
+=head2 Field Request Syntax
+
+There are two kinds of field requests: moves and prints.
+A print request will also move the current location in
+the record.  A move request generates no output.
+
+See the corresponding Syntax sections for each of these.
+
+=head2 Print Request Syntax
+
+A print request has the format:
+
+   N'type'Offset:bitOffset:nBits'printFormatList'
+
+and must be separated by spaces from every other
+command line argument.  The components are defined as:
+
+=over 4
+
+=item N - Number of sequential fields of this data type
+to extract and print.  N is optional, with a
+default value of 1.  It must not have a sign
+prefixed ('+' or '-').
+
+=item type - The data type of the fields to extract and print.
+See Data Types on type 
+
+   pick ?t
+
+for information on data types.
+
+=item Offset - The 'Offset' has the form:
+
+   dataOffset(+|-)byteOffset
+
+where dataOffset is the absolute location
+of this item in the record in numbers of items
+of type 'type', and the byteOffset is the
+the desired offset in bytes from this location.
+'Offset' is an optional parameter, if not
+specified, the next item in the record will be
+selected.  The 'byteOffset' is an optional
+component of the 'Offset'.  However, if it
+is used, then the 'dataOffset' must also be
+specified, even if '0'.  The sign must be
+included as part of the byteOffset.
+For example, the field
+
+   z60-2
+
+selects the 60th single-precision complex item,
+offset towards the beginning of the record by
+two bytes.  A common convenient way to specify
+an absolute byte location within a record is to
+specify the dataOffset as zero with a positive
+byte offset.  For example, the request above 
+could also be written:
+
+   z0+478
+
+which selects the complex number at an offset
+of 478 bytes from the beginning of the record.
+The counting for byte and data offsets, as with 
+all other counting in pick, is zero-offset.
+
+=item bitOffset - (Not available for data types with more than 4 bytes.)
+An optional field which specifies the first
+bit of the data field to use.  'bitOffset'
+is zero offset.  For example, the field
+
+   i:7
+
+selects the next integer, and only uses
+the eighth through 32nd bits (7--31)
+for printing.  Bit zero is the LSB.
+
+=item nBits - (Not available for data types with more than 4 bytes.)
+If a 'bitOffset' is specified, 'nBits' may
+be used to to select the number of bits,
+starting from the 'bitOffset', to be printed.
+For example, the field
+
+   w5:1:7
+
+selects the second through eighth bits (1-7)
+of the fifth unsigned short in the record.
+
+=item printFormatList - Zero or more print formats used to
+specify the format of the output for
+this field request.  See the Print Format section, or type 
+
+   pick ?f
+
+for detailed help.
+
+=head2 Data Types
+
+The following data types are supported by pick:
+(Sizes in bytes are listed in brackets.)
+  
+  Integral Data Types:
+  'c' [1] signed char;     'b' [1] unsigned char
+  's' [2] signed short;    'w' [2] unsigned short
+  'i' [4] signed int;      'u' [4] unsigned int
+  
+whether or not an integral data type is signed only
+really matters to the default output printformat.
+The printformat used determines whether the data are
+interpreted as signed or unsigned.
+
+  ASCII Data Types:
+  'S' [1] is a synonym for 'c', but uses the 'S' printFormat as default.
+  'A' [1] is a synonym for 'c', but uses the 'A' printFormat as default.
+  
+  Floating Types:
+  'f' [4] single float;    'd' [8] double float
+  'z' [8] float complex;   'Z' [16] double complex
+
+=head2 Print Format
+
+Available to all data types:
+
+          'x' hex               'x' octal
+          'b' binary            'c' ascii
+
+          'S' ascii, with no space between items.
+          'A' ascii, won't print non-printing characters.
+  
+          'U' unformatted (binary bytes) output
+
+Available to Integral Data Types Only:
+
+          'd' decimal           'u' unsigned decimal
+  
+Available to Floating Data Types Only:
+
+          'g' floating  (For complex types, equivalent to RI format.)
+          'G' same as 'g', but with lots of digits.
+          'D' degrees; assumes the data value is in
+              radians, and performs the conversion to
+              output degrees.
+  
+Available to Complex Data Types Only:
+
+          'R' real component    'I' imaginary component
+          'M' magnitude         'P' phase in radians
+                                'D' phase in degrees
+  
+Non-data print formats for all types:
+
+          'n' insert CR/LF      's' insert <sp>
+
+A 'printFormatList' is composed of zero or more
+printing formats.  If none is specified, the
+defaults will be used:
+
+             Data Type       Default Printformat
+                A                    A
+                S                    S
+                c                    c
+                b                    x
+                s                    d
+                w                    u
+                i                    d
+                u                    u
+                f                    g
+                d                    g
+                z                    RI
+                Z                    RI
+
+For example:
+
+              f wb zMPn i0+57osss Z b5:1:7bdx
+
+Prints a single precision floating point in 'g'
+format, an unsigned short in binary, a single-
+precision complex's magnitude and phase followed
+by a newline, the integer at byte offset 57 in
+octal followed by three extra spaces, a
+double-precision complex's real and imaginary
+component, and bits 1-7 of the fifth unsigned
+char interpreted first as binary, then decimal
+and finally hexadecimal.
+
+=head2 Formatting output with spaces
+
+To print out a space without changing the 'move location' within the
+record, use the following:
+
+              -1 bs
+
+which backs up the location by one byte, then reads a byte, and prints
+only a space as the print format.  This will fail at the very beginning
+of a data record, in which case one should use:
+
+              bs -1
+
+The version above would fail at the end of the data record.
+
+See also the Print Format section.
+
+=head2 Move Request Syntax
+
+A move request has the format:
+
+  (+|-)N'type'
+
+where the '+' or '-' specifies the move direction,
+N is the number of data words to move (bytes if no
+'type' identifier is specified).  See below for 'type'
+specifiers.
+
+Examples:  
+
+   +2 -237 +5z -3i
+
+these move the current location in the record by
+forward 2 bytes, back 237 bytes, forward 40 bytes
+and back 12 bytes, respectively.
+
+=head2 Group Syntax
+
+For more advanced B<pick>'ing, one may employ "Groups" and "group multipliers":
+  
+Any number of fields may be enclosed in brackets
+to form a group.  For example:
+
+         [ 4f i ] 
+
+requests a group of four floats followed by an integer.
+
+In order to avoid being interpreted by the shell, one
+may need to escape the '[]'s with a backslash '\\' or by
+enclosing the string within single quotes:
+
+         '[ 4f i ]'
+
+This is a syntax quite like the Unix awk command line.
+
+A numerical prefix to the group designates a repetition
+factor for the group.  For example:
+
+         20[ f +96f i -100f ]
+
+requests 20 pairs of floats and integers, where each
+float is separated from the integer by 400 bytes, but
+the floats and the integers themselves are sequential.
+There must be no space between the prefix and the opening
+bracket.  This is beginning to look a little like a 
+Touring machine mode.
+
+=head1 Symbol Tables
+
+As a convenience for dealing with standard file formats,
+such as the ifproc mocomp file, the AIRSAR mocomp file,
+SRTM telemetry, AIRSAR headers and subcommutated headers,
+TOPEX/Poseidon SDR's and GDR's, GeoSAR time-dependent parameter
+files, etc, one may define a symbol file as a set of 
+(possibly recursive) key = value definitions mapping more
+easily remembered mnemonics onto admittedly less-obvious pick
+commands.  For example, to define the ifproc mocomp symbol file,
+the following file, F<moc>, is created:
+
+   ; This is the symbol table for .moc files, which
+   ; are the radar motion compensation files for section 334.
+   
+   length=21d  ; length is 21 double-precision (8 byte) numbers
+   
+   ; these are the components of the file
+   
+   xRec = d0G
+   xrec = d0G
+   time = d1G
+   utc = d1G
+   prf = d2 ; actually 1/prf...
+   tprf = d2
+   posS = d3
+   posC = d4
+   posH = d5
+   pos = posS posC posH
+   velS = d6
+   velC = d7
+   velH = d8
+   vel = velS velC velH
+   af1S = d9
+   af1C = d10
+   af1H = d11
+   af1 = 3d9
+   af2 = 3d12
+   af3 = 3d15
+   az = d18
+   yaw = d18
+   pitch = d19
+   roll = d20
+   orient = 3d18
+   azD = d18D
+   yawD = d18D
+   pitchd = d19D
+   rollD = d20D
+   orientD = 3d18D
+   all = 21d0
+   af = af1 af2 af3
+   angles = posS orientD
+   velocities = posS vel
+   tube = pos
+   
+
+Note that the file is very similar to RDF (though pre-dating
+it by a couple of years), with comment fields delimited by
+semi-colons.  However, the values are interpreted recursively:
+the 'af' key's value, 'af1 af2 af3' is defined elsewhere in the
+file.  And there is no need (or allowance) for the 'units' notation of RDF.
+
+Note also that the symbols 'length', 'size' and 'head' are reserved
+for pick; in a symbol file they do not define new symbols
+but rather serve as parameter definitions.  For example, in
+this mocomp file, the record length is set at the beginning of
+the file to be 21 doubles long.
+
+If this file is in the present-working directory, named 'moc',
+and a mocomp file named test.moc is available, then one could
+use commands like:
+
+      pick sym=moc test.moc velocities every=100
+
+to print out the velocities as a function of along-track position
+for every hundredth entry in the file.  A nice shortcut is to
+use an environmental variable, recognized by pick:  PICKPATH,
+to specify a folder of such symbol files.  If the filename specified
+by the sym parameter isn't in the present-working directory, then
+pick will search the folder specified by PICKPATH.  For example,
+using B<zsh>, add the lines to the F<.zshenv> file:
+
+        export PICKPATH=/users/imel/.pick
+        alias pickMocomp='pick sym=moc'
+
+and put a copy of the moc file listed above in that folder.
+Now, the above command is:
+
+        pickMocomp test.moc velocities skip=100 | xmgr -nxy -source stdin &
+
+where we've piped the output to xmgr for display.
+
+=head1 Examples
+
+Here are additional examples both of Field Request syntax, and of general
+B<pick> usage.
+
+=head2 Example Field Requests:
+
+  4d0+30 2z 5i 
+
+Extract, starting at byte 30 in the record, four
+double-precision floats, print in floating point format,
+two single-precision complex's, print real followed
+by imaginary components for each, and five 4-byte
+signed integers, printing in signed decimal format.
+
+   6[ f i ]
+
+From the present position in the record,
+extract a series of 6 4-byte float and
+4-byte integer pairs, printing the
+floats in floating point format and the
+integers in signed decimal format.
+
+   Z20 +1280Z ZMP 
+
+Extract the twentieth double-precision complex
+in the record, print in floating point format
+(real <sp> imaginary), move forward 1280 double
+precision complexes (1280*16 bytes) and extract
+another double precision complex, printing the
+magnitude followed by the phase in radians.
+
+   20[ f 3[ wx cb ] +1000 i:27d -1091 ]
+
+Extract a 4-byte float (print in floating point),
+3 unsigned short-signed char pairs, printing the
+short in hex and the char in binary, move forward
+1000 bytes, extract a four-byte signed integer,
+printing only the 5 most significant bits
+in decimal format, and move back 1091 bytes.
+Repeat this operation 20 times for each record.
+
+Note that for moves, the current position in the record
+is the location after the most recent request.  For example,
+in the above, the +1000 byte move is referenced from the
+position after the third short/byte pair.
+
+=head2 Complete Examples
+
+   pick file1.dat 256 20c100c rec=1
+
+Prints twenty characters in ascii format starting
+at byte 100 for the second (256-byte) record only
+in file1.dat.
+
+   pick file2.dat 5120f 10f500 head=5i start=500
+
+Prints in floating point format ten consecutive
+single-precision floats starting at the 500'th
+float in the record, for every record starting
+with record number 500 (the 501'st 5120*4=20480 byte
+record in file2.dat). The record count begins after a 
+5 integer (20 byte) header.
+
+   pick file3.dat 80 40[ cc +1 ] skip=1
+
+Prints every other character in each record
+(ascii format), skipping every other record.
+(The first character in the file is printed.)
+
+   pick gold225-1.laux 128 +90 32b -b \
+      start=`pick gold225-1.laux 128 +88 w -n \
+             | awk '{ if ($2==0) { print $1 ; exit;}}'` \
+      | pick 4096 +439 50A
+
+This command line actually launches three pick processes
+in order to extract a field from an AIRSAR subcommutated
+header.  The first B<pick> command extracts the subcommutated
+header, starting with the record specified by the result 
+of the second pick command, which extracts the index field
+from the header.  When the index field reaches zero, a new
+subcommutated header begins.  So the output of the second
+pick command is sent to awk to look for the record corresponding
+to an index value of zero.  The output of the first pick command
+is now a set of subcommutated headers (in their original binary
+format) which is piped to the third pick command, which selects
+the desired field:  50 Ascii characters starting at an offset
+from the beginning of the record by 439 bytes.
+
+=head1 RETURN VALUE
+
+The output of pick is ascii, unless the C<-b> option is specified.
+
+=head1 ERRORS
+
+Typical B<pick> errors are:
+
+=over 4
+
+=item o Couldn't find symbol table-->$symFile<--
+
+The symbol table should be either in the present working directory, have its
+path specified, or be in the folder given by the $PICKPATH environmental 
+variable.
+
+=item o data requested beyond record length:
+
+This common error means that the requests have gone beyond the record length.
+This is triggered any time the 'record pointer' internal to B<pick> goes beyond
+the end of the record, even if no actual output is requested.  Thus, this error
+could be triggered by the following:
+
+   pick ascii.txt 80 80c bn 
+
+which is attempting to print an extra new-line at the end of each record.
+The way to do this is:
+
+   pick ascii.txt 80 80c -1 bn
+
+=item o Unrecognized print format for complex type: $p
+
+Complex numbers have a restricted subset of print formats.  See the 
+Print Format subsection for the list of allowed Complex print formats.
+
+=item o unrecognized print format-->$p<--:
+
+($p is the print format character B<pick> doesn't like.)  See the Print Format
+subsection for a complete listing of allowed print formats.
+
+=item o Unrecognized option-->$oName<--:
+
+($oName will be the option that B<pick> doesn't recognize.)  Either an
+invalid option was requested, or perhaps there was a typo in a move
+request, i.e., 
+
+   -z 
+
+instead of 
+
+   -1z
+
+See the Options subsection for a complete list of recognized options.
+
+=item o Unexpected '=' in command line after parsing parms:
+
+B<pick> doesn't recognize a key=value parameter on the command line.
+See the Parameters subsection for a complete list of recognized parameters.
+
+=item o Can't find record size; looking at $args[0]:
+
+($args[0] is the first non-option, non-parameter command line argument.)
+Usually means the record size wasn't included on the command line.  Remember
+that it's still necessary with the
+
+   cat file.dat | pick recLen ...
+
+format.
+
+=item o End of file while seeking past header:
+
+Probably means that the header specified with the head[er] keyword is too 
+large compared to the file actually being parsed.
+
+=back
+
+=head1 FILES
+
+The F<$PICKPATH> environmental variable is used as a default folder for
+symbol table files.
+
+=head1 SEE ALSO
+
+The internal B<pick> documentation:
+
+  pick ?
+
+to get a listing of topics.
+
+=head1 NOTES
+
+Its Not A Good Thing to bookkeep the documentation in two separate places.
+Thus, we may eventually 
+eliminate the online documentation in favor of the POD. 
+
+=head1 CAVEATS
+
+Not all of the parameters and options are compatible with each other.
+Read the documentation for each to see which ones are mutually exclusive.
+
+=head1 DIAGNOSTICS
+
+None.
+
+=head1 BUGS
+
+Send bug reports to imel@jpl.nasa.gov for I<immediate> response!
+
+=head1 RESTRICTIONS
+
+None.
+
+=head1 AUTHOR
+
+David A. Imel, 17 March 2000
+
+=head1 HISTORY
+
+The current version is $Revision: 3.5 $
+
+   $Log: pick.template,v $
+   Revision 3.5  2001/03/11 10:21:31  imel
+   corrected version number.
+
+   Revision 1.5  2001/03/11 10:10:04  imel
+   updated date and revision
+
+   Revision 1.1  2001/03/11 10:07:51  imel
+   Initial revision
+
+   Revision 1.4  2000/03/17 17:57:22  imel
+   Believe it or not, the previous RCS log entry makes POD unhappy.
+   Fixed by indenting all RCS tag entries in POD section.
+
+   Revision 1.3  2000/03/17 17:53:35  imel
+   fixed stupid POD bug with -z
+   
+   Revision 1.2  2000/03/17 17:49:17  imel
+   Transfeerred online documentation to POD
+   Added ERRORS section, with some helpfule hunints
+   
+   Revision 1.1  2000/03/17 16:21:52  imel
+   Initial revision
+
+
+=cut
