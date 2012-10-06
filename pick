@@ -767,12 +767,12 @@ sub printData {
                 }
               }
             }
-          } elsif ($p=~/^[udgG]$/) { 
+          } elsif ($p=~/^[udgG]$ & !($q->{t}=~/[cb]/)) { 
             printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)); 
           } elsif ($p eq 'D') {
             printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)*180.0/$PI);
           } elsif ($p=~/^[ns]$/) { printf($pFormats{$p}); }
-          elsif ($p=~/^[xo]$/) {
+          elsif ($p=~/^[xodu]$/) {
             my @bout;
             @k=unpack("C1"x$q->{nb},$d);
             foreach $k (@k[$q->{nb}-$nb..$q->{nb}-1]) { 
@@ -1036,13 +1036,13 @@ The parameters are of the form:
 
    key1 = val1 key2 = val2 ...
 
-=over 4
-
 The available parameter keywords are listed below.
 The value is a number of records for the start, stop,
 skip, nrecs, rec and every keys, a number of bytes
 or data type words (see data type help) for the head,
 length and size keys.  The file key takes an ascii filename.
+
+=over 4
 
 =item file - alternative way to specify filename. 
 (filename is a synonym for file)
@@ -1167,6 +1167,8 @@ this field request.  See the Print Format section, or type
    pick ?f
 
 for detailed help.
+
+=back
 
 =head2 Data Types
 
@@ -1623,7 +1625,10 @@ David A. Imel, 17 March 2000
 
 =head1 HISTORY
 
-The current version is $Revision: 3.5 $
+The current version is $Revision: 3.6 $
+
+   Revision 3.6  2012/10/04 imel
+   fixed printFormat bug for displaying 'd or 'u' with single byte types
 
    $Log: pick.template,v $
    Revision 3.5  2001/03/11 10:21:31  imel
