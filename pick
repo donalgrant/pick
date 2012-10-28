@@ -767,7 +767,7 @@ sub printData {
                 }
               }
             }
-          } elsif ($p=~/^[udgG]$ & !($q->{t}=~/[cb]/)) { 
+          } elsif ($p=~/^[udgG]$/ & !($q->{t}=~/[cb]/)) { 
             printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)); 
           } elsif ($p eq 'D') {
             printf($pFormats{$p},unpack("$q->{ut}$q->{nb}",$d)*180.0/$PI);
