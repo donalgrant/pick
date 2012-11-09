@@ -1,0 +1,16 @@
+length=12d
+frame = d0G
+time = d1G
+tprf = d2
+lat = d3G
+lon = d4G
+alt = d5
+ve = d6G
+vn = d7G 
+vu = d8G
+hdg = d9G
+pitch = d10G
+roll = d11G
+v = ve vn vu
+pos = lat lon alt
+orient = hdg pitch roll

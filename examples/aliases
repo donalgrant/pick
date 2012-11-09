@@ -1,0 +1,7 @@
+alias pickMocomp 'pick sym=moc'
+alias pickCorr 'pick sym=corr'
+alias pickAirsar 'pick sym=airmoc'
+alias pickAux 'pick sym=aux'
+alias pickSub 'pick sym=subcom_2002'
+alias pickHW  'pick sym=hw'
+alias pick_hw 'pick sym=hw'

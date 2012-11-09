@@ -1,0 +1,83 @@
+;
+; pick symbol table for AIRSAR subcommutated data files
+; 
+length=4096
+;
+sub_len = w0+0u
+used_len = w0+2u
+;
+; data collection notes
+; 
+target  =  25A0+439
+invstg  =  25A0+464
+hp_opr  =  25A0+489
+crew    =  25A0+514
+mode    =  25A0+539
+status  =  25A0+564
+antenna =  25A0+589
+telev   =   8A0+638 ; target elevation in feet
+dser1   =  10A0+683 ; digital tape serial number HDDR #1
+dser2   =  10A0+683 ; digital tape serial number HDDR #2
+dser3   =  10A0+683 ; digital tape serial number HDDR #3
+notes   = 256A0+1131 ; operator's notes
+;
+; data in six-gun position
+; 
+six_month = b0+1412u ; month (1..12)
+six_day   = b0+1413u ; day   (1..31)
+six_year  = w0+1414u ; year  (1900..2999)
+six_hour  = b0+1416u ; hour  (0..23)
+six_min   = b0+1417u ; min   (0..59)
+six_sec   = b0+1418u ; sec   (0..60)
+six_nsec  = u0+1419u ; fractional seconds (0..999,999,999) [nano-seconds]
+;
+six_f_cnt = u0+1476u ; 32-bit frame count at GPS time tag
+;
+; True-Time data
+; 
+TTmonth = b0+2188u ; month (1..12)
+TTday   = b0+2189u ; day   (1..31)
+TTyear  = w0+2190u ; year  (1900..2999)
+TThour  = b0+2192u ; hour  (0..23)
+TTmin   = b0+2193u ; min   (0..59)
+TTsec   = b0+2194u ; sec   (0..60)
+TTnsec  = u0+2195u ; fractional seconds (0..999,999,999) [nano-seconds]
+;
+TTf_cnt = u0+2212u ; 32-bit frame count at True-Time time tag
+;
+; EO-17 message
+; 
+egi17TimeTag = w0+2496u ; 1553 time tag
+;
+; EO-18 message
+; 
+egi18GpsTimeHi = w0+2560u ; gps time tag word
+egi18GpsTime2  = w0+2562u ; gps time tag word
+egi18GpsTime3  = w0+2564u ; gps time tag word
+egi18GpsTimeLo = w0+2566u ; gps time tag word
+
+egi18GpsTimeHigh = u0+2560u ; gps time tag word
+egi18GpsTimeLow  = u0+2564u ; gps time tag word
+
+egi18UtcTimeHi = w0+2568u ; utc time tag word
+egi18UtcTime2  = w0+2570u ; utc time tag word
+egi18UtcTime3  = w0+2572u ; utc time tag word
+egi18UtcTimeLo = w0+2574u ; utc time tag word
+
+egi18UtcTimeHigh = u0+2568u ; utc time tag word
+egi18UtcTimeLow  = u0+2572u ; utc time tag word
+;
+; EO-19 message
+; 
+egi19TimeTag          = w0+2622u      ; Time tag 
+egi19PltfrmAzTimeTag  = w0+2654u      ; Platform azimuth time tag 
+egi19RollTimeTag      = w0+2656u      ; Roll time tag 
+egi19PitchTimeTag     = w0+2658u      ; Pitch time tag 
+;
+; end of record stuff
+; 
+motionSensorFlag = b0+3004d           ; Bit 0 set = IGI, bit 1 set = EGI 
+hdrVersion       = 6A0+3005           ; Date of this revision, eg. 980817 
+eosd             = 4A0+3011           ; Indicates end of used subheader 
+
+

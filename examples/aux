@@ -1,0 +1,28 @@
+;
+; symtable for AIRSAR aux file (the main headers)
+; 
+length=128
+;
+pn=u0x
+f_size = w0+4u
+h_size = b0+6u
+flag   = b0+7b
+f_cnt  = u0+8u
+prf_div = w0+12u
+f_control = u0+14b
+status = w0+18b
+
+gmt_ms = w0+18:0:10d
+
+gmt_bin = 2u0+20b
+gmt_acc = w0+22:0:2u
+gmt_sec = w0+22:2:7u
+gmt_min = w0+22:9:7u
+gmt_hrs = w0+20:0:7u
+gmt_day = w0+20:7:9u
+
+egi_time = u0+82u
+ins_time_tag = w0+86u
+
+index = w0+88u
+mux_dat = 32b0+90x

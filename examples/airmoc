@@ -1,0 +1,24 @@
+; This is the symbol table for AIRSAR mocomp files
+
+length=104  ; 104 bytes:  a real*8 time followed by 24 floats
+
+; these are the components of the file
+
+time = d0G
+
+; d0 is the same as f0 and f1 in terms of data offset
+
+tprf = f2
+tgs  = f3
+xc   = f4
+xv0  = f5
+xv   = f6
+lat  = f7G
+lon  = f8G
+hdg  = f9
+trc  = f10
+pitch = f11
+roll  = f12
+trc0  = f13
+
+atens = 12f14

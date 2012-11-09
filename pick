@@ -1627,6 +1627,10 @@ David A. Imel, 17 March 2000
 
 The current version is $Revision: 3.6 $
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> example files and sync up with github
    Revision 3.6  2012/10/04 imel
    fixed printFormat bug for displaying 'd or 'u' with single byte types
 

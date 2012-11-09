@@ -1,0 +1,31 @@
+### i should be able to insert these with whatever comment delimeter i
+### want, as long as it's nothing that would show up on the command line.
+### This is the symTable file for the corrData file put out by the ATI
+### processor.  It's length is 92 bytes.
+length = 116
+### ###
+centerRecord = i0d
+ready = i0+4d
+rangeToPixel = d1
+doppler = d2
+theta = d3
+range = d4
+phaseDiff = d5
+correlation = d6
+mag = d7
+losS = d8
+losC = d9
+losH = d10
+perp = d11
+par = d12
+rangeCell = i0+104d
+azCell = i0+108d
+azGroup = i0+112d
+record = centerRecord
+r0 = rangeToPixel
+az = theta
+phase = phaseDiff
+corr = correlation
+los = losS losC losH
+
+

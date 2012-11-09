@@ -1,0 +1,42 @@
+; This is the symbol table for .moc files, which
+; are the radar motion compensation files for section 334.
+
+length=21d  ; length is 21 double-precision (8 byte) numbers
+
+; these are the components of the file
+
+xRec = d0G
+xrec = d0G
+time = d1G
+utc = d1G
+prf = d2 ; actually 1/prf...
+tprf = d2
+posS = d3
+posC = d4
+posH = d5
+pos = posS posC posH
+velS = d6
+velC = d7
+velH = d8
+vel = velS velC velH
+af1S = d9
+af1C = d10
+af1H = d11
+af1 = 3d9
+af2 = 3d12
+af3 = 3d15
+az = d18
+yaw = d18
+pitch = d19
+roll = d20
+orient = 3d18
+azD = d18D
+yawD = d18D
+pitchd = d19D
+rollD = d20D
+orientD = 3d18D
+all = 21d0
+af = af1 af2 af3
+angles = posS orientD
+velocities = posS vel
+tube = pos
